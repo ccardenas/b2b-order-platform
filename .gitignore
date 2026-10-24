@@ -1,0 +1,35 @@
+# Archivos personales (no forman parte del repo)
+guia-claude-code.md
+
+# Java / Maven (order-processor)
+order-processor/target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# Go (products-api)
+products-api/bin/
+*.exe
+*.test
+
+# Node / NestJS (clients-api)
+node_modules/
+clients-api/dist/
+npm-debug.log*
+
+# Docker / entornos locales
+.env
+.env.*
+!.env.example
+
+# IDE / editores
+.idea/
+.vscode/
+*.iml
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

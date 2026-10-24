@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "PRODUCT_NOT_FOUND",
+    "message": "Product PRD-999 not found in market MX",
+    "traceId": "3f2a9e6b-6c40-4b8a-9b36-3f6b6c6a9e21"
+  }
+}

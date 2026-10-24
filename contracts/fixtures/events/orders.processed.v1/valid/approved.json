@@ -1,0 +1,18 @@
+{
+  "eventId": "01J8ZP7A1B2C3D4E5F6G7H8J9",
+  "eventVersion": 1,
+  "occurredAt": "2026-09-18T15:42:11Z",
+  "sourceEventId": "01J8ZP6M5E4RH0K7Y2N9A3TQWX",
+  "orderId": "ORD-MX-000147",
+  "status": "APPROVED",
+  "market": "MX",
+  "currency": "MXN",
+  "totals": {
+    "grossSubtotal": 1836.0,
+    "discount": 25.56,
+    "netSubtotal": 1810.44,
+    "tax": 289.67,
+    "grandTotal": 2100.11
+  },
+  "reason": null
+}

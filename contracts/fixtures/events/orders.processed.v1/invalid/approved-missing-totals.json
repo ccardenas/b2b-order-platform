@@ -1,0 +1,12 @@
+{
+  "eventId": "01J8ZP7C3D4E5F6G7H8J9K0L1",
+  "eventVersion": 1,
+  "occurredAt": "2026-09-19T09:20:00Z",
+  "sourceEventId": "01J8ZQ6H7J8K9L0M1N2P3Q4R5S",
+  "orderId": "ORD-PE-000007",
+  "status": "APPROVED",
+  "market": "PE",
+  "currency": "PEN",
+  "totals": null,
+  "reason": null
+}

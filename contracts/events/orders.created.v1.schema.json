@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://b2b-order-platform.local/contracts/events/orders.created.v1.schema.json",
+  "title": "orders.created.v1",
+  "description": "Evento de entrada publicado por el sistema de captura de pedidos. Tópico orders.created.v1, clave recomendada orderId.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["eventId", "eventVersion", "orderId", "market", "currency", "clientId", "items"],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identificador del evento de entrada. No garantiza unicidad por sí solo: ver S3 de la propuesta (mismo orderId+eventVersion, distinto eventId -> VERSION_CONFLICT)."
+    },
+    "eventVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Revision del pedido (monotona por orderId), no version del esquema. Requerido: toda la estrategia de idempotencia (S1/S2) depende de este campo."
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "orderId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "market": {
+      "type": "string",
+      "enum": ["MX", "CO", "PE"]
+    },
+    "currency": {
+      "type": "string",
+      "enum": ["MXN", "COP", "PEN"]
+    },
+    "clientId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "channel": {
+      "type": "string"
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "description": "La unicidad de productId dentro del pedido es una regla de negocio validada por order-processor (domain/validation), no expresable en JSON Schema sin perder legibilidad.",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["productId", "quantity", "unitPrice"],
+        "properties": {
+          "productId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "unitPrice": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Precio acordado (S5). El productor serializa como numero JSON; order-processor lo parsea a BigDecimal (USE_BIG_DECIMAL_FOR_FLOATS), nunca como double."
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "required": ["market"], "properties": { "market": { "const": "MX" } } },
+      "then": { "properties": { "currency": { "const": "MXN" } } }
+    },
+    {
+      "if": { "required": ["market"], "properties": { "market": { "const": "CO" } } },
+      "then": { "properties": { "currency": { "const": "COP" } } }
+    },
+    {
+      "if": { "required": ["market"], "properties": { "market": { "const": "PE" } } },
+      "then": { "properties": { "currency": { "const": "PEN" } } }
+    }
+  ]
+}

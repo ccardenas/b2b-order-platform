@@ -11,11 +11,14 @@ order-processor/target/
 products-api/bin/
 *.exe
 *.test
+*.out
 
-# Node / NestJS (clients-api)
+# Node / NestJS (clients-api, contracts)
 node_modules/
 clients-api/dist/
 npm-debug.log*
+coverage/
+.nyc_output/
 
 # Docker / entornos locales
 .env

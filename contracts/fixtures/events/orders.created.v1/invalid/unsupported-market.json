@@ -1,0 +1,12 @@
+{
+  "eventId": "01J8ZQ5G6H7J8K9L0M1N2P3Q4R",
+  "eventVersion": 1,
+  "occurredAt": "2026-09-19T10:15:00Z",
+  "orderId": "ORD-BR-000006",
+  "market": "BR",
+  "currency": "BRL",
+  "clientId": "CLI-99999",
+  "items": [
+    { "productId": "PRD-003", "quantity": 5, "unitPrice": 9.99 }
+  ]
+}

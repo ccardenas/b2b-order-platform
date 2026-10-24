@@ -1,0 +1,7 @@
+{
+  "productId": "PRD-014",
+  "name": "Insumo exento",
+  "sku": "INS-000-EXE",
+  "status": "DISCONTINUED",
+  "taxCategory": "EXEMPT"
+}

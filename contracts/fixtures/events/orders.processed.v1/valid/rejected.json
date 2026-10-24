@@ -1,0 +1,12 @@
+{
+  "eventId": "01J8ZP7B2C3D4E5F6G7H8J9K0",
+  "eventVersion": 1,
+  "occurredAt": "2026-09-19T09:15:00Z",
+  "sourceEventId": "01J8ZQ1N2P3Q4R5S6T7U8V9W0X",
+  "orderId": "ORD-CO-000002",
+  "status": "REJECTED",
+  "market": "CO",
+  "currency": "COP",
+  "totals": null,
+  "reason": "CLIENT_BLOCKED"
+}

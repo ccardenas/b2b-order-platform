@@ -1,0 +1,15 @@
+{
+  "name": "b2b-order-platform-contracts",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Validacion de fixtures contra los JSON Schema y OpenAPI de contracts/",
+  "scripts": {
+    "validate": "node validate.js"
+  },
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "js-yaml": "^4.1.0"
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://b2b-order-platform.local/contracts/events/orders.processed.v1.schema.json",
+  "title": "orders.processed.v1",
+  "description": "Evento de salida publicado por order-processor. Solo para pedidos APPROVED o REJECTED: TECHNICAL_FAILURE nunca se publica aqui (S8), solo se envia a la DLT.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["eventId", "eventVersion", "occurredAt", "sourceEventId", "orderId", "status", "market", "currency", "totals", "reason"],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identificador del evento de salida (outbox.eventId). Es estable entre reintentos de publicacion del relay."
+    },
+    "eventVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sourceEventId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "eventId del evento orders.created.v1 que origino este resultado."
+    },
+    "orderId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["APPROVED", "REJECTED"]
+    },
+    "market": {
+      "type": "string",
+      "enum": ["MX", "CO", "PE"]
+    },
+    "currency": {
+      "type": "string",
+      "enum": ["MXN", "COP", "PEN"]
+    },
+    "totals": {
+      "description": "null cuando el pedido fue rechazado (S7): un pedido rechazado no tiene importes comprometidos.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["grossSubtotal", "discount", "netSubtotal", "tax", "grandTotal"],
+          "properties": {
+            "grossSubtotal": { "type": "number", "minimum": 0 },
+            "discount": { "type": "number", "minimum": 0 },
+            "netSubtotal": { "type": "number", "minimum": 0 },
+            "tax": { "type": "number", "minimum": 0 },
+            "grandTotal": { "type": "number", "minimum": 0 }
+          }
+        }
+      ]
+    },
+    "reason": {
+      "description": "Primera razon de rechazo en orden determinista (S9), null si el pedido fue aprobado.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "string",
+          "enum": [
+            "CLIENT_NOT_FOUND",
+            "CLIENT_BLOCKED",
+            "CLIENT_MARKET_MISMATCH",
+            "PRODUCT_NOT_FOUND",
+            "PRODUCT_DISCONTINUED"
+          ]
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "required": ["status"], "properties": { "status": { "const": "APPROVED" } } },
+      "then": { "properties": { "totals": { "type": "object" }, "reason": { "type": "null" } } }
+    },
+    {
+      "if": { "required": ["status"], "properties": { "status": { "const": "REJECTED" } } },
+      "then": { "properties": { "totals": { "type": "null" }, "reason": { "type": "string" } } }
+    }
+  ]
+}

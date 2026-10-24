@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "CLIENT_NOT_FOUND",
+    "message": "Client CLI-00000 not found"
+  }
+}

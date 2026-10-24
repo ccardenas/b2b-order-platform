@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "CLIENT_BLOCKED",
+    "message": "Client CLI-99821 is blocked",
+    "traceId": "abc123"
+  },
+  "debug": "stack trace leaked"
+}

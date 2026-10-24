@@ -1,0 +1,12 @@
+{
+  "eventId": "01J8ZP7E5F6G7H8J9K0L1M2N3",
+  "eventVersion": 1,
+  "occurredAt": "2026-09-19T09:30:00Z",
+  "sourceEventId": "01J8ZQ8K9L0M1N2P3Q4R5S6T7U",
+  "orderId": "ORD-CO-000009",
+  "status": "TECHNICAL_FAILURE",
+  "market": "CO",
+  "currency": "COP",
+  "totals": null,
+  "reason": null
+}

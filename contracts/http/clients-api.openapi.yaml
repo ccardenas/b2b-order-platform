@@ -1,0 +1,86 @@
+openapi: 3.1.0
+info:
+  title: Clients API
+  version: "1.0.0"
+  description: >
+    Maestro de clientes por mercado, en memoria. No conoce reglas de
+    elegibilidad de pedidos (esas reglas viven en order-processor).
+paths:
+  /health:
+    get:
+      summary: Healthcheck
+      responses:
+        "200":
+          description: Servicio saludable
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [UP]
+  /clients/{clientId}:
+    get:
+      summary: Obtener un cliente por id
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Cliente encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Client"
+        "404":
+          description: Cliente inexistente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Limite temporal de solicitudes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Error transitorio del servicio
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  schemas:
+    Client:
+      type: object
+      additionalProperties: true
+      required: [clientId, name, status, segment, taxRegime, market]
+      description: >
+        status, segment y taxRegime son tres campos independientes del
+        cliente (ver docs/prueba tecnica Tech Lead.pdf §6): no son valores
+        de un unico enum.
+      properties:
+        clientId:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, BLOCKED]
+        segment:
+          type: string
+          enum: [RETAIL, WHOLESALE]
+        taxRegime:
+          type: string
+          enum: [GENERAL, SIMPLIFIED, EXEMPT]
+        market:
+          type: string
+          enum: [MX, CO, PE]
+    Error:
+      $ref: "https://b2b-order-platform.local/contracts/http/error.schema.json"

@@ -1,0 +1,7 @@
+{
+  "productId": "PRD-003",
+  "name": "Producto con estado desconocido",
+  "sku": "SKU-003",
+  "status": "DRAFT",
+  "taxCategory": "STANDARD"
+}

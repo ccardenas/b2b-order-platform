@@ -1,0 +1,88 @@
+openapi: 3.1.0
+info:
+  title: Products API
+  version: "1.0.0"
+  description: >
+    Catalogo de productos por mercado, en memoria. No conoce precios, impuestos
+    ni reglas de pedidos (esas reglas viven en order-processor).
+paths:
+  /health:
+    get:
+      summary: Healthcheck
+      responses:
+        "200":
+          description: Servicio saludable
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [UP]
+  /products/{productId}:
+    get:
+      summary: Obtener un producto por id en un mercado
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: market
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [MX, CO, PE]
+      responses:
+        "200":
+          description: Producto encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: Producto inexistente en ese mercado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Limite temporal de solicitudes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Error transitorio del servicio
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  schemas:
+    Product:
+      type: object
+      additionalProperties: true
+      required: [productId, name, sku, status, taxCategory]
+      properties:
+        productId:
+          type: string
+        name:
+          type: string
+        sku:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, DISCONTINUED]
+        taxCategory:
+          type: string
+          description: >
+            Categoria fiscal del producto (dato de catalogo). La tasa de
+            impuesto por mercado+categoria es una regla de order-processor,
+            no de esta API.
+          enum: [STANDARD, REDUCED, EXEMPT]
+    Error:
+      $ref: "https://b2b-order-platform.local/contracts/http/error.schema.json"

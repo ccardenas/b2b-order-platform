@@ -69,6 +69,10 @@ Kafka (orders.created.v1) → order-processor (Java) → clients-api (NestJS)
 
 > Actualizar esta sección a medida que existan.
 
+> `order-processor` necesita un **JDK 21** (no alcanza con un JRE: `javac` tiene
+> que existir). Si `./mvnw` falla con `error: release version 21 not supported`,
+> es porque solo hay JRE instalado — hace falta `JAVA_HOME` apuntando a un JDK 21.
+
 ```bash
 # contracts (JSON Schema + OpenAPI + fixtures)
 cd contracts && npm install && npm run validate

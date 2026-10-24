@@ -1,5 +1,5 @@
 # Archivos personales (no forman parte del repo)
-guia-claude-code.md
+.local/
 
 # Java / Maven (order-processor)
 order-processor/target/

@@ -1,0 +1,55 @@
+{
+  "name": "clients-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Maestro de clientes por mercado (NestJS, en memoria)",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "test": "jest",
+    "test:e2e": "jest --config test/jest-e2e.json"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.0",
+    "@nestjs/core": "^11.1.0",
+    "@nestjs/platform-express": "^11.1.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^11.1.0",
+    "@types/express": "^5.0.0",
+    "@types/jest": "^30.0.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.0.0",
+    "@types/supertest": "^6.0.0",
+    "ajv": "^8.17.1",
+    "jest": "^30.0.0",
+    "js-yaml": "^4.1.0",
+    "supertest": "^7.1.0",
+    "ts-jest": "^29.4.0",
+    "typescript": "~5.9.3"
+  },
+  "overrides": {
+    "multer": "^2.5.0"
+  },
+  "jest": {
+    "rootDir": "src",
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.ts$": "ts-jest"
+    },
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "testEnvironment": "node"
+  }
+}

@@ -30,6 +30,7 @@ paths:
           required: true
           schema:
             type: string
+            pattern: "^[A-Za-z0-9-]{1,64}$"
       responses:
         "200":
           description: Cliente encontrado
@@ -37,20 +38,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Client"
+        "400":
+          description: >
+            clientId fuera del patron declarado (code INVALID_REQUEST). Error
+            del llamador: no se reintenta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "404":
-          description: Cliente inexistente
+          description: Cliente inexistente (code CLIENT_NOT_FOUND)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "429":
-          description: Limite temporal de solicitudes
+          description: Limite temporal de solicitudes (code RATE_LIMITED, header Retry-After en segundos)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "500":
-          description: Error transitorio del servicio
+          description: Error transitorio del servicio (code INTERNAL_ERROR)
           content:
             application/json:
               schema:

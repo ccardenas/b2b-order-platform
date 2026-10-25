@@ -89,6 +89,7 @@ cd products-api && PORT=8080 FAULT_INJECTION_ENABLED=true go run ./cmd/products-
 
 # clients-api
 cd clients-api && npm ci && npm test && npm run test:e2e
+cd clients-api && npm run build && PORT=3000 FAULT_INJECTION_ENABLED=true npm start
 
 # todo el stack
 docker compose up -d --build

@@ -69,9 +69,12 @@ Kafka (orders.created.v1) → order-processor (Java) → clients-api (NestJS)
 
 > Actualizar esta sección a medida que existan.
 
-> `order-processor` necesita un **JDK 21** (no alcanza con un JRE: `javac` tiene
-> que existir). Si `./mvnw` falla con `error: release version 21 not supported`,
-> es porque solo hay JRE instalado — hace falta `JAVA_HOME` apuntando a un JDK 21.
+> `order-processor` necesita un **JDK ≥ 21** (no alcanza con un JRE: `javac` tiene
+> que existir). El bytecode se genera para Java 21 aunque el JDK sea más nuevo,
+> porque el `pom.xml` fija `java.version=21` (verificado con JDK 25).
+> Si `./mvnw` falla con `error: release version 21 not supported`, el JDK en uso
+> es anterior a 21; con solo un JRE, Maven falla con `No compiler is provided in
+> this environment`. En ambos casos, apunta `JAVA_HOME` a un JDK ≥ 21.
 
 ```bash
 # contracts (JSON Schema + OpenAPI + fixtures)
@@ -81,7 +84,8 @@ cd contracts && npm install && npm run validate
 cd order-processor && ./mvnw verify
 
 # products-api
-cd products-api && go vet ./... && go test ./...
+cd products-api && go vet ./... && go test -race ./...
+cd products-api && PORT=8080 FAULT_INJECTION_ENABLED=true go run ./cmd/products-api
 
 # clients-api
 cd clients-api && npm ci && npm test && npm run test:e2e

@@ -43,20 +43,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Product"
+        "400":
+          description: >
+            market ausente o fuera de MX/CO/PE (code INVALID_MARKET). Error del
+            llamador: no se reintenta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "404":
-          description: Producto inexistente en ese mercado
+          description: Producto inexistente en ese mercado (code PRODUCT_NOT_FOUND)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "429":
-          description: Limite temporal de solicitudes
+          description: Limite temporal de solicitudes (code RATE_LIMITED, header Retry-After en segundos)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "500":
-          description: Error transitorio del servicio
+          description: Error transitorio del servicio (code INTERNAL_ERROR)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: >
+            Servicio no disponible o request cancelado/vencido
+            (code SERVICE_UNAVAILABLE). Transitorio: se puede reintentar.
           content:
             application/json:
               schema:

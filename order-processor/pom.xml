@@ -21,6 +21,7 @@
     <java.version>21</java.version>
     <archunit.version>1.5.1</archunit.version>
     <wiremock.version>3.13.2</wiremock.version>
+    <json-schema-validator.version>1.5.6</json-schema-validator.version>
   </properties>
 
   <dependencies>
@@ -37,6 +38,11 @@
     <dependency>
       <groupId>org.mongodb</groupId>
       <artifactId>mongodb-driver-sync</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.kafka</groupId>
+      <artifactId>spring-kafka</artifactId>
     </dependency>
 
     <dependency>
@@ -74,6 +80,26 @@
     <dependency>
       <groupId>org.testcontainers</groupId>
       <artifactId>mongodb</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>kafka</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.awaitility</groupId>
+      <artifactId>awaitility</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- Valida el payload publicado contra contracts/events/*.schema.json (§10 "Contratos"). -->
+    <dependency>
+      <groupId>com.networknt</groupId>
+      <artifactId>json-schema-validator</artifactId>
+      <version>${json-schema-validator.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

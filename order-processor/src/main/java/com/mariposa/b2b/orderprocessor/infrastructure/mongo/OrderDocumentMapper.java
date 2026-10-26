@@ -20,7 +20,7 @@ import java.util.List;
  * POJO intermedio ni mapeo por reflexion. Importes y tasas van como Decimal128,
  * nunca como double; los instantes, como BSON Date (precision de milisegundos).
  */
-final class OrderDocumentMapper {
+public final class OrderDocumentMapper {
 
     static final int SCHEMA_VERSION = 1;
 
@@ -78,7 +78,7 @@ final class OrderDocumentMapper {
                 .append("createdAt", date(processed.processedAt()))
                 .append("publishedAt", null)
                 .append("publishAttempts", 0)
-                .append("payload", payload(processed, outboxEventId))));
+                .append("payload", payload(processed))));
         return fields;
     }
 
@@ -90,8 +90,12 @@ final class OrderDocumentMapper {
      * Evento orders.processed.v1 tal como se publicara (§7.3: "el payload publicado se
      * lee del documento persistido"). Sigue contracts/events/orders.processed.v1.schema.json:
      * totals es null y reason es la primera razon cuando el pedido fue rechazado.
+     * Es publico porque la publicacion inmediata (kafka/out) usa exactamente este
+     * mismo payload: asi el camino rapido y el relay publican los mismos bytes.
      */
-    private static Document payload(ProcessedOrder processed, String outboxEventId) {
+    public static Document payload(ProcessedOrder processed) {
+        String outboxEventId = processed.outboxEventId()
+                .orElseThrow(() -> new IllegalArgumentException("a TECHNICAL_FAILURE has no processed event"));
         var order = processed.order();
         ProcessingOutcome outcome = processed.outcome();
         List<RejectionReason> reasons = reasons(outcome);

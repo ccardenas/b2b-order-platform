@@ -8,7 +8,8 @@
 #   products-api  http://localhost:8080
 #   clients-api   http://localhost:3000
 #
-# order-processor se agrega en el hito 7.
+# order-processor no expone puertos: consume orders.created.v1 y escribe en
+# Mongo, orders.processed.v1 y orders.processing.dlt.
 
 name: b2b-order-platform
 
@@ -109,3 +110,25 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
+
+  order-processor:
+    build: ./order-processor
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      mongo:
+        condition: service_healthy
+      products-api:
+        condition: service_healthy
+      clients-api:
+        condition: service_healthy
+    # Variables con la forma de relaxed binding de Spring: sin guiones dentro de
+    # cada segmento (order-processor.http.clients-base-url -> ORDERPROCESSOR_HTTP_CLIENTSBASEURL).
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_DATA_MONGODB_URI: mongodb://mongo:27017/b2b_orders?serverSelectionTimeoutMS=5000
+      ORDERPROCESSOR_HTTP_CLIENTSBASEURL: http://clients-api:3000
+      ORDERPROCESSOR_HTTP_PRODUCTSBASEURL: http://products-api:8080
+    # Sin healthcheck hasta el hito 8 (actuator). Si Mongo o Kafka no estan al
+    # arrancar, la aplicacion termina y compose la vuelve a levantar.
+    restart: on-failure

@@ -3,6 +3,35 @@
 Diferencias reales respecto de `docs/architecture-proposal.md` y decisiones
 que la propuesta no fijaba. La propuesta no se reescribe: se anota aquí.
 
+## Resumen frente a la propuesta
+
+Cómo quedó cada sección de la propuesta. "Igual" significa que se implementó como estaba
+escrita; las notas de las tablas por hito (más abajo) explican cada diferencia.
+
+| Propuesta | Estado | Diferencias y detalles |
+|---|---|---|
+| §2 Supuestos S1–S12 | Igual | S11 (sin autenticación entre servicios) queda como deuda. |
+| §3 Responsabilidades y límites | Igual | Las tasas fiscales viven en order-processor; las APIs no conocen Kafka. |
+| §4.1 Capas de order-processor | Con diferencias | Sin puerto `DeadLetterPublisher` ni `Clock` propio (N2, K1). Sin POJO `OrderDocument`: el layout BSON lo arma el mapper (M1). Paquete extra `domain/idempotency` (N13). |
+| §4.2 products-api | Igual | Detalles del contrato y de los fallos en P1–P7. |
+| §4.3 clients-api | Con diferencias | Inyección de fallos como interceptor, no middleware (C4). NestJS 11 (C5). |
+| §4.4 Contrato de error | Igual | Origen del `traceId` en P7 / C7. |
+| §5.1 Flujo principal | Con diferencias | El offset se confirma **después** de la publicación inmediata, no antes (K16). |
+| §5.2 Clasificación de errores | Con diferencias | Todo 5xx es transitorio (N1). Un 404 sin código de negocio es permanente (N6). Categoría extra `UNEXPECTED` (K3). Números con tipo incorrecto son `DESERIALIZATION` (K6). |
+| §5.3 Timeouts y reintentos | Igual en valores | `Retry-After` también en 5xx (N7), *equal jitter* (N8), presupuesto de enriquecimiento de 12 s (N12), `serverSelectionTimeoutMS=5000` (M7). |
+| §5.4 Respuestas parciales | Igual | — |
+| §5.5 Metadata de la DLT | Igual | Definición de `x-attempts` (K4) y formato de headers (K5). |
+| §6 Idempotencia y concurrencia | Igual | Reintento del upsert si la relectura tras un E11000 dice "escribible" (M2). Ver [ADR 0001](adr/0001-idempotencia-con-escritura-condicional.md). |
+| §7 Consistencia Mongo–Kafka | Igual | Un `TECHNICAL_FAILURE` se guarda sin outbox y borra el anterior (N14, M3). Relay sin lease (K11). Ver [ADR 0002](adr/0002-outbox-embebido-en-el-documento-del-pedido.md). |
+| §7.4 Índices | Igual | Se crean al construir el store, con nombres fijos (M8). |
+| §8.1 Ownership | Incompleto | `contracts/events/dlt-headers.md` no existe (G1). |
+| §8.3 Validación en CI | Parcial | Sin CI ni job de compatibilidad de schemas (G2). La validación contra OpenAPI existe en clients-api (C8), no en products-api (P8). |
+| §9 Riesgos | Igual | La caché de productos sigue siendo el siguiente paso, no está implementada. |
+| §10 Estrategia de pruebas | Parcial | Todo lo de la tabla salvo el script de smoke E2E (G3) y la validación contra OpenAPI en Go (P8). |
+| §11 Decisiones descartadas | Respetadas | Además se descartaron Spring Data MongoDB (M1) y resilience4j / `RestClient` (N4). |
+| §12 Plan incremental | Igual | De los recortes previstos solo se aplicó el del smoke E2E (G3). Las métricas y el relay están implementados. |
+| Anexo: observabilidad | Igual | Transición extra `publication_pending` (O2). Gauge del outbox actualizado por el relay (O7). |
+
 ## products-api (hito 2)
 
 | # | Tema | Propuesta | Implementación | Motivo |
@@ -98,6 +127,7 @@ que la propuesta no fijaba. La propuesta no se reescribe: se anota aquí.
 | K13 | order-processor en compose | Nota I7 | Agregado (imagen `eclipse-temurin:21.0.12_8-{jdk,jre}-alpine-3.24`, usuario sin privilegios), con `restart: on-failure`. **Sin healthcheck** hasta el hito 8 (actuator). Las variables usan la forma de relaxed binding de Spring (`ORDERPROCESSOR_HTTP_CLIENTSBASEURL`). | Cierra I7. Un `ORDER_PROCESSOR_HTTP_CLIENTS_BASE_URL` no enlazaría con `order-processor.http.clients-base-url`. |
 | K14 | Tests de recuperación | "Relay del outbox tras un fallo de publicación" | Los fallos se inyectan con beans `@Primary` que envuelven los adaptadores reales (publicador, store), según el `orderId`. No se detiene el broker ni Mongo. | Deterministas y rápidos. Detener contenedores a mitad del test vuelve flaky la suite. Kafka, Mongo y el relay siguen siendo reales. |
 | K15 | Aislamiento de los IT | — | Cada clase IT cierra su contexto (`@DirtiesContext`) y cada test usa `orderId` únicos. Los contenedores se comparten por JVM. | Dos contextos vivos con el mismo group id se repartirían las particiones y se robarían mensajes. |
+| K16 | Orden entre commit y publicación | §5.1: escritura (6), **commit del offset (7)**, publicación (8) | El caso de uso publica dentro del listener, y `AckMode.RECORD` confirma el offset cuando el listener termina: escritura → publicación inmediata → `markPublished` → commit. | La condición de §6.4 se cumple igual: el estado es durable antes de publicar. Si el proceso cae después de publicar y antes del commit, la reentrega da `DUPLICATE` y no republica; si tampoco llegó a marcar `PUBLISHED`, el relay republica con el mismo `eventId`. El costo es que el broker caído retiene el commit hasta 10 s (K9). Detectado al redactar el resumen del hito 9. **Pendiente de confirmar con Claudio.** |
 
 ## Observabilidad de order-processor (hito 8)
 
@@ -114,3 +144,22 @@ que la propuesta no fijaba. La propuesta no se reescribe: se anota aquí.
 | O9 | Servidor HTTP | No especificado | `spring-boot-starter-web` solo para actuator, en el **puerto 8081**, exponiendo `health` y `prometheus`. Tomcat con virtual threads (`spring.threads.virtual.enabled=true`). | 8080 es de products-api en el host. |
 | O10 | Healthcheck | Nota K13 | `wget` a `/actuator/health` en compose. Es *liveness*: no hay health indicator de Mongo (no hay Spring Data) ni de Kafka. | El proceso arriba y el contexto levantado alcanzan para compose. Con Mongo caído al arrancar, la aplicación no arranca (M8). Un indicador de readiness es una mejora posible. |
 | O11 | Métricas en tests | — | `ObservabilityIT` usa `@AutoConfigureObservability`. | En `@SpringBootTest`, Boot desactiva los exportadores de métricas por defecto y `/actuator/prometheus` responde 404. |
+
+## No implementado
+
+Lo que la propuesta menciona y esta versión no incluye.
+
+| # | Propuesta | Estado | Qué hay en su lugar |
+|---|---|---|---|
+| G1 | §8.1: `contracts/events/dlt-headers.md` como fuente de verdad de la DLT | No existe | Los headers están en §5.5 de la propuesta, en el README y en `DeadLetterHeaders`. `OrderProcessingFlowIT` verifica que el registro de la DLT lleve exactamente esos headers. |
+| G2 | §8.3: CI con verificación de compatibilidad de schemas respecto de `main` | No hay CI | Los tests y `contracts/validate.js` se corren localmente. Pact sigue siendo una evolución opcional. |
+| G3 | §10: script de smoke E2E con `docker compose up` | No hay script | La sección "Probar el sistema a mano" del README, con comandos verificados sobre un stack recién creado el 2026-10-26. Es el recorte que §12 dejaba para el final. |
+| G4 | §7.2: lease del relay (`outbox.lockedUntil`) | No implementado, como prevé la propuesta | Publicación al menos una vez con `eventId` estable (K11). |
+
+## Pendientes de confirmar con Claudio
+
+| Nota | Decisión |
+|---|---|
+| N1 | Todo 5xx (no solo 500/502/503) es transitorio. |
+| K3 | Categoría `UNEXPECTED` para errores no previstos. |
+| K16 | El commit del offset ocurre después de la publicación inmediata. |

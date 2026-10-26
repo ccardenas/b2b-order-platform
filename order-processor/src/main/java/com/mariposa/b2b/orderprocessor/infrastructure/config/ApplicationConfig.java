@@ -3,9 +3,12 @@ package com.mariposa.b2b.orderprocessor.infrastructure.config;
 import com.mariposa.b2b.orderprocessor.application.ProcessOrderUseCase;
 import com.mariposa.b2b.orderprocessor.application.port.out.ClientCatalog;
 import com.mariposa.b2b.orderprocessor.application.port.out.IdGenerator;
+import com.mariposa.b2b.orderprocessor.application.port.out.OrderMetrics;
 import com.mariposa.b2b.orderprocessor.application.port.out.OrderResultStore;
 import com.mariposa.b2b.orderprocessor.application.port.out.ProcessedEventPublisher;
 import com.mariposa.b2b.orderprocessor.application.port.out.ProductCatalog;
+import com.mariposa.b2b.orderprocessor.infrastructure.metrics.MicrometerOrderMetrics;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -30,6 +33,11 @@ class ApplicationConfig {
         return () -> UUID.randomUUID().toString();
     }
 
+    @Bean
+    OrderMetrics orderMetrics(MeterRegistry registry) {
+        return new MicrometerOrderMetrics(registry);
+    }
+
     /** Un virtual thread por llamada HTTP de enriquecimiento (§6.1). */
     @Bean(destroyMethod = "close")
     ExecutorService enrichmentExecutor() {
@@ -42,9 +50,11 @@ class ApplicationConfig {
      */
     @Bean
     ProcessOrderUseCase processOrderUseCase(ClientCatalog clients, ProductCatalog products, OrderResultStore store,
-                                            ProcessedEventPublisher publisher, IdGenerator ids, Clock clock,
+                                            ProcessedEventPublisher publisher, IdGenerator ids, OrderMetrics metrics,
+                                            Clock clock,
                                             ExecutorService enrichmentExecutor,
                                             @Value("${order-processor.enrichment-timeout:12s}") Duration enrichmentTimeout) {
-        return new ProcessOrderUseCase(clients, products, store, publisher, ids, clock, enrichmentExecutor, enrichmentTimeout);
+        return new ProcessOrderUseCase(clients, products, store, publisher, ids, metrics, clock, enrichmentExecutor,
+                enrichmentTimeout);
     }
 }

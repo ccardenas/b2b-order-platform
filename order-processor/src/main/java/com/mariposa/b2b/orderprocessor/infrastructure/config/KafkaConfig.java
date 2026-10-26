@@ -9,9 +9,11 @@ import com.mariposa.b2b.orderprocessor.infrastructure.kafka.in.InboundOrderDeser
 import com.mariposa.b2b.orderprocessor.infrastructure.kafka.in.OrderCreatedListener;
 import com.mariposa.b2b.orderprocessor.infrastructure.kafka.out.DeadLetterHeaders;
 import com.mariposa.b2b.orderprocessor.infrastructure.kafka.out.KafkaProcessedEventPublisher;
+import com.mariposa.b2b.orderprocessor.infrastructure.kafka.out.ObservedDeadLetterRecoverer;
 import com.mariposa.b2b.orderprocessor.infrastructure.kafka.out.ProcessedEventJson;
 import com.mariposa.b2b.orderprocessor.infrastructure.kafka.out.ProcessedEventSender;
 import com.mariposa.b2b.orderprocessor.infrastructure.kafka.out.RawValueSerializer;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.TopicPartition;
@@ -27,6 +29,8 @@ import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.core.MicrometerConsumerListener;
+import org.springframework.kafka.core.MicrometerProducerListener;
 import org.springframework.kafka.core.ProducerFactory;
 import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
@@ -50,25 +54,32 @@ class KafkaConfig {
 
     @Bean
     ConsumerFactory<String, InboundOrder> consumerFactory(KafkaProperties kafka, MessagingProperties messaging,
-                                                          ObjectMapper mapper) {
+                                                          ObjectMapper mapper, MeterRegistry registry) {
         Map<String, Object> props = kafka.buildConsumerProperties(null);
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, messaging.maxPollRecords());
         // Un mensaje ilegible no lanza en el poll (bloquearia la particion): llega al error handler.
-        return new DefaultKafkaConsumerFactory<>(props, new StringDeserializer(),
-                new ErrorHandlingDeserializer<>(new InboundOrderDeserializer(mapper)));
+        DefaultKafkaConsumerFactory<String, InboundOrder> factory = new DefaultKafkaConsumerFactory<>(props,
+                new StringDeserializer(), new ErrorHandlingDeserializer<>(new InboundOrderDeserializer(mapper)));
+        // Metricas del cliente Kafka, entre ellas el lag del consumidor del anexo
+        // (kafka_consumer_fetch_manager_records_lag_max). Con fabrica propia, Boot no lo agrega solo.
+        factory.addListener(new MicrometerConsumerListener<>(registry));
+        return factory;
     }
 
     @Bean
-    ProducerFactory<String, Object> producerFactory(KafkaProperties kafka) {
+    ProducerFactory<String, Object> producerFactory(KafkaProperties kafka, MeterRegistry registry) {
         Map<String, Object> props = kafka.buildProducerProperties(null);
         props.put(ProducerConfig.ACKS_CONFIG, "all");
         props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
         // Acota cuanto bloquea una publicacion con el broker caido (delivery >= request + linger).
         props.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 5_000);
         props.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 10_000);
-        return new DefaultKafkaProducerFactory<>(props, new StringSerializer(), new RawValueSerializer());
+        DefaultKafkaProducerFactory<String, Object> factory =
+                new DefaultKafkaProducerFactory<>(props, new StringSerializer(), new RawValueSerializer());
+        factory.addListener(new MicrometerProducerListener<>(registry));
+        return factory;
     }
 
     @Bean
@@ -89,7 +100,7 @@ class KafkaConfig {
      */
     @Bean
     DefaultErrorHandler kafkaErrorHandler(KafkaTemplate<String, Object> template, MessagingProperties messaging,
-                                          DeadLetterHeaders headers) {
+                                          DeadLetterHeaders headers, MeterRegistry registry) {
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(template,
                 // Misma particion que el original: el DLT tiene las mismas particiones (nota I1).
                 (record, exception) -> new TopicPartition(messaging.deadLetterTopic(), record.partition()));
@@ -102,7 +113,8 @@ class KafkaConfig {
         backOff.setMultiplier(messaging.persistenceBackoffMultiplier());
         backOff.setMaxInterval(messaging.persistenceMaxBackoff().toMillis());
 
-        DefaultErrorHandler handler = new DefaultErrorHandler(recoverer, backOff);
+        DefaultErrorHandler handler = new DefaultErrorHandler(
+                new ObservedDeadLetterRecoverer(recoverer, headers, registry), backOff);
         handler.addNotRetryableExceptions(DeadLetterException.class);
         return handler;
     }
@@ -142,7 +154,8 @@ class KafkaConfig {
     }
 
     @Bean
-    OrderCreatedListener orderCreatedListener(ProcessOrderUseCase useCase, MessagingProperties messaging) {
-        return new OrderCreatedListener(useCase, messaging.inputTopic());
+    OrderCreatedListener orderCreatedListener(ProcessOrderUseCase useCase, MessagingProperties messaging,
+                                              MeterRegistry registry) {
+        return new OrderCreatedListener(useCase, messaging.inputTopic(), registry);
     }
 }

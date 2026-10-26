@@ -33,7 +33,13 @@ public final class DeadLetterHeaders {
         this.clock = clock;
     }
 
-    private record Classification(ErrorCategory category, String cause) {
+    public record Classification(ErrorCategory category, String cause) {
+    }
+
+    /** La misma clasificacion que va en x-error-category / x-error-cause, para logs y metricas. */
+    public Classification classify(Exception exception) {
+        Classification classification = classify(unwrap(exception));
+        return new Classification(classification.category(), sanitize(classification.cause()));
     }
 
     public Headers build(ConsumerRecord<?, ?> record, Exception exception) {

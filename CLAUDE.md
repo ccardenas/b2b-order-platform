@@ -83,6 +83,7 @@ cd contracts && npm install && npm run validate
 # order-processor
 cd order-processor && ./mvnw test     # unitarios, WireMock y ArchUnit (sin Docker)
 cd order-processor && ./mvnw verify   # además los *IT con Testcontainers (requiere Docker)
+curl -s localhost:8081/actuator/prometheus | grep '^orders_'   # métricas con el stack de compose arriba
 
 # products-api
 cd products-api && go vet ./... && go test -race ./...

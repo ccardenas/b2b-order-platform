@@ -6,6 +6,7 @@ import com.mariposa.b2b.orderprocessor.application.port.out.ClientCatalog;
 import com.mariposa.b2b.orderprocessor.application.port.out.ExternalCallFailedException;
 import com.mariposa.b2b.orderprocessor.application.port.out.ExternalCallFailedException.Kind;
 import com.mariposa.b2b.orderprocessor.application.port.out.IdGenerator;
+import com.mariposa.b2b.orderprocessor.application.port.out.OrderMetrics;
 import com.mariposa.b2b.orderprocessor.application.port.out.OrderResultStore;
 import com.mariposa.b2b.orderprocessor.application.port.out.OrderResultStore.WriteResult;
 import com.mariposa.b2b.orderprocessor.application.port.out.OrderStorageException;
@@ -33,6 +34,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.slf4j.MDC;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -71,6 +73,7 @@ class ProcessOrderUseCaseTest {
     private final InMemoryOrderResultStore store = new InMemoryOrderResultStore();
     private final RecordingPublisher publisher = new RecordingPublisher();
     private final IdGenerator ids = new SequentialIds();
+    private final RecordingMetrics metrics = new RecordingMetrics();
     private ExecutorService executor;
     private ProcessOrderUseCase useCase;
 
@@ -86,10 +89,11 @@ class ProcessOrderUseCaseTest {
     @AfterEach
     void tearDown() {
         executor.shutdownNow();
+        MDC.clear();
     }
 
     private ProcessOrderUseCase useCaseWithTimeout(Duration timeout) {
-        return new ProcessOrderUseCase(clients, products, store, publisher, ids,
+        return new ProcessOrderUseCase(clients, products, store, publisher, ids, metrics,
                 Clock.fixed(NOW, ZoneOffset.UTC), executor, timeout);
     }
 
@@ -397,6 +401,67 @@ class ProcessOrderUseCaseTest {
         assertThat(publisher.published).as("nothing is published when this instance did not write").isEmpty();
     }
 
+    // ---------------------------------------------------------------- metricas y contexto de log
+
+    @Test
+    void countsEveryWrittenResultByStatusAndMarket() {
+        useCase.process(command(item("PRD-001", 24, "35.50")));
+
+        assertThat(metrics.events).containsExactly("processed:APPROVED:MX");
+    }
+
+    @Test
+    void countsEachRejectionReason() {
+        clients.willReturnNothing("CLI-1");
+        products.willReturnNothing("PRD-001");
+
+        useCase.process(command(item("PRD-001", 1, "10.00")));
+
+        assertThat(metrics.events).containsExactly(
+                "processed:REJECTED:MX", "rejected:CLIENT_NOT_FOUND", "rejected:PRODUCT_NOT_FOUND");
+    }
+
+    @Test
+    void countsTechnicalFailuresAsProcessedToo() {
+        products.willFail("PRD-001", transientFailure("products-api"));
+
+        useCase.process(command(item("PRD-001", 1, "10.00")));
+
+        assertThat(metrics.events).containsExactly("processed:TECHNICAL_FAILURE:MX");
+    }
+
+    @Test
+    void countsDuplicatesAndStaleWithoutCountingThemAsProcessed() {
+        useCase.process(command("EVT-2", 2, item("PRD-001", 1, "10.00")));
+        useCase.process(command("EVT-2", 2, item("PRD-001", 1, "10.00")));
+        useCase.process(command("EVT-1", 1, item("PRD-001", 1, "10.00")));
+
+        assertThat(metrics.events).containsExactly("processed:APPROVED:MX", "duplicate", "stale");
+    }
+
+    @Test
+    void aWriteLostToARaceIsCountedLikeTheEarlyCheck() {
+        store.forceNextWrite(WriteResult.DUPLICATE);
+
+        useCase.process(command(item("PRD-001", 1, "10.00")));
+
+        assertThat(metrics.events).containsExactly("duplicate");
+    }
+
+    @Test
+    void theParallelCallsSeeTheLogContextOfTheMessage() {
+        MDC.put("orderId", "ORD-MX-000147");
+        List<String> seen = java.util.Collections.synchronizedList(new ArrayList<>());
+        clients.beforeEachCall = () -> seen.add("client:" + MDC.get("orderId"));
+        products.beforeEachCall = () -> seen.add("product:" + MDC.get("orderId"));
+
+        useCase.process(command(item("PRD-001", 1, "10.00"), item("PRD-002", 1, "10.00")));
+
+        assertThat(seen).containsExactlyInAnyOrder(
+                "client:ORD-MX-000147", "product:ORD-MX-000147", "product:ORD-MX-000147");
+        assertThat(MDC.get(TransitionLog.OUTCOME)).isEqualTo("APPROVED");
+    }
+
     // ---------------------------------------------------------------- publicacion y persistencia
 
     @Test
@@ -587,6 +652,30 @@ class ProcessOrderUseCaseTest {
                 throw failWith;
             }
             published.add(processed);
+        }
+    }
+
+    private static final class RecordingMetrics implements OrderMetrics {
+        final List<String> events = java.util.Collections.synchronizedList(new ArrayList<>());
+
+        @Override
+        public void processed(OrderStatus status, Market market) {
+            events.add("processed:" + status + ":" + market);
+        }
+
+        @Override
+        public void rejected(RejectionReason reason) {
+            events.add("rejected:" + reason);
+        }
+
+        @Override
+        public void duplicate() {
+            events.add("duplicate");
+        }
+
+        @Override
+        public void stale() {
+            events.add("stale");
         }
     }
 

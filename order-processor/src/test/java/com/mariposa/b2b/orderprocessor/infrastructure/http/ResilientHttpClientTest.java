@@ -50,6 +50,7 @@ class ResilientHttpClientTest extends WireMockHttpTestBase {
         assertThat(response.body()).isEqualTo("{\"ok\":true}");
         assertThat(response.attempts()).isEqualTo(1);
         assertThat(sleeps).isEmpty();
+        assertThat(registry.find("http.client.retries").counter()).isNull();
     }
 
     @ParameterizedTest
@@ -76,6 +77,8 @@ class ResilientHttpClientTest extends WireMockHttpTestBase {
                 });
 
         verifyRequests(3);
+        // http_client_retries_total{target}: 2 reintentos para 3 intentos.
+        assertThat(registry.counter("http.client.retries", "target", "products-api").count()).isEqualTo(2);
         // base 200 ms y 800 ms, con equal jitter fijo en 0.5 -> 150 ms y 600 ms (rango real: [base/2, base])
         assertThat(sleeps).containsExactly(Duration.ofMillis(150), Duration.ofMillis(600));
     }
@@ -108,6 +111,7 @@ class ResilientHttpClientTest extends WireMockHttpTestBase {
 
         verifyRequests(1);
         assertThat(sleeps).isEmpty();
+        assertThat(registry.find("http.client.retries").counter()).as("giving up is not a retry").isNull();
     }
 
     @ParameterizedTest

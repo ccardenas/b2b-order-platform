@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
@@ -39,10 +40,12 @@ abstract class WireMockHttpTestBase {
 
     ResilientHttpClient http;
     URI baseUrl;
+    SimpleMeterRegistry registry;
 
     @BeforeEach
     void setUpHttp() {
         sleeps.clear();
+        registry = new SimpleMeterRegistry();
         baseUrl = URI.create(wireMock.baseUrl());
         http = httpClient(baseUrl);
     }
@@ -53,7 +56,7 @@ abstract class WireMockHttpTestBase {
                 .followRedirects(HttpClient.Redirect.NEVER)
                 .build();
         RetryPolicy policy = new RetryPolicy(3, Duration.ofMillis(200), 4, Duration.ofSeconds(2));
-        return new ResilientHttpClient(client, READ_TIMEOUT, policy, sleeps::add, () -> 0.5);
+        return new ResilientHttpClient(client, READ_TIMEOUT, policy, sleeps::add, () -> 0.5, registry);
     }
 
     static String errorBody(String code) {

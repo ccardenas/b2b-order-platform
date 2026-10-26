@@ -189,6 +189,7 @@ class MongoOrderResultStoreIT {
                     store,
                     processed -> published.add(new ProcessedOrderSpy(processed.outboxEventId().orElseThrow())),
                     () -> UUID.randomUUID().toString(),
+                    new NoOpMetrics(),
                     Clock.fixed(T0, ZoneOffset.UTC),
                     enrichment,
                     Duration.ofSeconds(20));
@@ -210,6 +211,24 @@ class MongoOrderResultStoreIT {
     }
 
     private record ProcessedOrderSpy(String outboxEventId) {
+    }
+
+    private static final class NoOpMetrics implements com.mariposa.b2b.orderprocessor.application.port.out.OrderMetrics {
+        @Override
+        public void processed(OrderStatus status, Market market) {
+        }
+
+        @Override
+        public void rejected(RejectionReason reason) {
+        }
+
+        @Override
+        public void duplicate() {
+        }
+
+        @Override
+        public void stale() {
+        }
     }
 
     @Test

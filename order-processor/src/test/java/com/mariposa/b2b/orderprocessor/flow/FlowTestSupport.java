@@ -23,6 +23,7 @@ import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -45,7 +46,7 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options
  * vivos con el mismo group id se repartirian las particiones y se robarian mensajes.
  * Cada test usa orderIds propios, asi los topicos compartidos no interfieren.
  */
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 abstract class FlowTestSupport {
 
@@ -73,6 +74,9 @@ abstract class FlowTestSupport {
 
     @Autowired
     MongoClient mongoClient;
+
+    @LocalServerPort
+    int port;
 
     @BeforeEach
     void resetApis() {

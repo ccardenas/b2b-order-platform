@@ -8,8 +8,8 @@
 #   products-api  http://localhost:8080
 #   clients-api   http://localhost:3000
 #
-# order-processor no expone puertos: consume orders.created.v1 y escribe en
-# Mongo, orders.processed.v1 y orders.processing.dlt.
+#   order-processor http://localhost:8081/actuator/health
+#                   http://localhost:8081/actuator/prometheus
 
 name: b2b-order-platform
 
@@ -129,6 +129,14 @@ services:
       SPRING_DATA_MONGODB_URI: mongodb://mongo:27017/b2b_orders?serverSelectionTimeoutMS=5000
       ORDERPROCESSOR_HTTP_CLIENTSBASEURL: http://clients-api:3000
       ORDERPROCESSOR_HTTP_PRODUCTSBASEURL: http://products-api:8080
-    # Sin healthcheck hasta el hito 8 (actuator). Si Mongo o Kafka no estan al
-    # arrancar, la aplicacion termina y compose la vuelve a levantar.
+    ports:
+      - "8081:8081"
+    healthcheck:
+      # wget de busybox, incluido en la imagen alpine del JRE.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 20s
+    # Si Mongo o Kafka no estan al arrancar, la aplicacion termina y compose la vuelve a levantar.
     restart: on-failure

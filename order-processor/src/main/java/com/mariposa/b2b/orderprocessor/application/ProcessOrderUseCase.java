@@ -5,6 +5,7 @@ import com.mariposa.b2b.orderprocessor.application.port.in.ProcessOrderResult;
 import com.mariposa.b2b.orderprocessor.application.port.out.ClientCatalog;
 import com.mariposa.b2b.orderprocessor.application.port.out.ExternalCallFailedException;
 import com.mariposa.b2b.orderprocessor.application.port.out.IdGenerator;
+import com.mariposa.b2b.orderprocessor.application.port.out.OrderMetrics;
 import com.mariposa.b2b.orderprocessor.application.port.out.OrderResultStore;
 import com.mariposa.b2b.orderprocessor.application.port.out.ProcessedEventPublisher;
 import com.mariposa.b2b.orderprocessor.application.port.out.ProcessedOrder;
@@ -28,6 +29,7 @@ import com.mariposa.b2b.orderprocessor.domain.validation.OrderValidator;
 import com.mariposa.b2b.orderprocessor.domain.validation.ValidationResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -37,6 +39,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -62,6 +65,7 @@ public final class ProcessOrderUseCase {
     private final OrderResultStore store;
     private final ProcessedEventPublisher publisher;
     private final IdGenerator ids;
+    private final OrderMetrics metrics;
     private final Clock clock;
     private final ExecutorService enrichmentExecutor;
     private final Duration enrichmentTimeout;
@@ -78,6 +82,7 @@ public final class ProcessOrderUseCase {
             OrderResultStore store,
             ProcessedEventPublisher publisher,
             IdGenerator ids,
+            OrderMetrics metrics,
             Clock clock,
             ExecutorService enrichmentExecutor,
             Duration enrichmentTimeout
@@ -87,6 +92,7 @@ public final class ProcessOrderUseCase {
         this.store = store;
         this.publisher = publisher;
         this.ids = ids;
+        this.metrics = metrics;
         this.clock = clock;
         this.enrichmentExecutor = enrichmentExecutor;
         this.enrichmentTimeout = enrichmentTimeout;
@@ -96,10 +102,13 @@ public final class ProcessOrderUseCase {
         Instant receivedAt = clock.instant();
         return switch (validator.validate(command.order())) {
             case ValidationResult.Invalid invalid -> {
-                log.warn("order rejected by contract validation category=VALIDATION failure={}", invalid.failure());
+                TransitionLog.warn(log, "validated", "valid", false, "failure", invalid.failure());
                 yield new ProcessOrderResult.Failed(ErrorCategory.VALIDATION, invalid.failure().name(), false);
             }
-            case ValidationResult.Valid valid -> processValid(valid.order(), command, receivedAt);
+            case ValidationResult.Valid valid -> {
+                TransitionLog.info(log, "validated", "valid", true, "items", valid.order().items().size());
+                yield processValid(valid.order(), command, receivedAt);
+            }
         };
     }
 
@@ -113,6 +122,8 @@ public final class ProcessOrderUseCase {
         }
 
         ProcessingOutcome outcome = evaluate(order);
+        MDC.put(TransitionLog.OUTCOME, outcome.status().name());
+        TransitionLog.info(log, "evaluated", "status", outcome.status(), "reasons", reasons(outcome));
         Instant processedAt = clock.instant();
         Optional<String> outboxEventId = outcome instanceof ProcessingOutcome.TechnicalFailure
                 ? Optional.empty()
@@ -121,18 +132,32 @@ public final class ProcessOrderUseCase {
                 order, outcome, command.source(), receivedAt, processedAt, outboxEventId);
 
         return switch (store.save(processed)) {
-            case APPLIED -> afterWrite(processed);
+            case APPLIED -> {
+                recordProcessed(processed);
+                yield afterWrite(processed);
+            }
             case DUPLICATE -> closeWithoutWrite(RevisionComparison.DUPLICATE);
             case STALE -> closeWithoutWrite(RevisionComparison.STALE);
             case VERSION_CONFLICT -> closeWithoutWrite(RevisionComparison.VERSION_CONFLICT);
         };
     }
 
+    /**
+     * DUPLICATE y STALE terminan aqui (son transiciones propias del anexo). VERSION_CONFLICT
+     * no se loguea aqui: termina en la DLT y la linea "dlt" ya lleva la categoria.
+     */
     private ProcessOrderResult closeWithoutWrite(RevisionComparison comparison) {
-        log.info("order not written comparison={}", comparison);
         return switch (comparison) {
-            case DUPLICATE -> new ProcessOrderResult.Skipped(ErrorCategory.DUPLICATE);
-            case STALE -> new ProcessOrderResult.Skipped(ErrorCategory.STALE);
+            case DUPLICATE -> {
+                metrics.duplicate();
+                TransitionLog.info(log, "duplicate");
+                yield new ProcessOrderResult.Skipped(ErrorCategory.DUPLICATE);
+            }
+            case STALE -> {
+                metrics.stale();
+                TransitionLog.info(log, "stale");
+                yield new ProcessOrderResult.Skipped(ErrorCategory.STALE);
+            }
             case VERSION_CONFLICT -> new ProcessOrderResult.Failed(
                     ErrorCategory.VERSION_CONFLICT, "same eventVersion received with a different eventId", false);
             case NEWER, RETRY_OF_TECHNICAL_FAILURE -> throw new IllegalStateException("writable: " + comparison);
@@ -142,10 +167,11 @@ public final class ProcessOrderUseCase {
     private ProcessOrderResult afterWrite(ProcessedOrder processed) {
         ProcessingOutcome outcome = processed.outcome();
         if (outcome instanceof ProcessingOutcome.TechnicalFailure failure) {
-            log.warn("order persisted status=TECHNICAL_FAILURE category={} cause={}", failure.category(), failure.cause());
+            TransitionLog.warn(log, "persisted", "status", outcome.status(), "category", failure.category());
             return new ProcessOrderResult.Failed(failure.category(), failure.cause(), true);
         }
-        log.info("order persisted status={} outboxEventId={}", outcome.status(), processed.outboxEventId().orElseThrow());
+        TransitionLog.info(log, "persisted", "status", outcome.status(),
+                "outboxEventId", processed.outboxEventId().orElseThrow());
         publishNow(processed);
         return new ProcessOrderResult.Completed(outcome.status());
     }
@@ -160,10 +186,11 @@ public final class ProcessOrderUseCase {
         try {
             publisher.publish(processed);
             store.markPublished(processed.order().orderId(), outboxEventId, clock.instant());
-            log.info("order published outboxEventId={}", outboxEventId);
+            TransitionLog.info(log, "published", "outboxEventId", outboxEventId, "path", "immediate");
         } catch (RuntimeException e) {
-            log.warn("order publication pending, relay will retry category=PUBLICATION outboxEventId={} error={}",
-                    outboxEventId, e.getClass().getSimpleName());
+            // No es una transicion del anexo: el pedido sigue en "persisted" y el relay lo publica.
+            TransitionLog.warn(log, "publication_pending", "category", ErrorCategory.PUBLICATION,
+                    "outboxEventId", outboxEventId, "error", e.getClass().getSimpleName());
         }
     }
 
@@ -173,8 +200,11 @@ public final class ProcessOrderUseCase {
             enrichment = enrich(order);
         } catch (ExternalCallFailedException e) {
             // Nunca se calcula con datos parciales (§5.4): un solo fallo invalida el pedido entero.
+            TransitionLog.warn(log, "enriched", "ok", false, "category", e.category(), "cause", e.getMessage());
             return new ProcessingOutcome.TechnicalFailure(e.category(), e.getMessage(), e.attempts());
         }
+        TransitionLog.info(log, "enriched", "ok", true, "clientFound", enrichment.client().isPresent(),
+                "productsFound", enrichment.products().size());
 
         List<RejectionReason> reasons = eligibility.evaluate(order, enrichment.client(), enrichment.products());
         if (!reasons.isEmpty()) {
@@ -196,11 +226,11 @@ public final class ProcessOrderUseCase {
      */
     private Enrichment enrich(ValidatedOrder order) {
         Future<Optional<ClientSnapshot>> clientCall =
-                enrichmentExecutor.submit(() -> clients.findById(order.clientId()));
+                enrichmentExecutor.submit(withCurrentMdc(() -> clients.findById(order.clientId())));
         Map<String, Future<Optional<ProductSnapshot>>> productCalls = new LinkedHashMap<>();
         for (OrderItem item : order.items()) {
             productCalls.put(item.productId(),
-                    enrichmentExecutor.submit(() -> products.findById(item.productId(), order.market())));
+                    enrichmentExecutor.submit(withCurrentMdc(() -> products.findById(item.productId(), order.market()))));
         }
 
         long deadline = System.nanoTime() + enrichmentTimeout.toNanos();
@@ -238,6 +268,35 @@ public final class ProcessOrderUseCase {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("interrupted while enriching order", e);
         }
+    }
+
+    /**
+     * El MDC es por hilo: sin esto, los logs de reintentos HTTP de las llamadas en paralelo
+     * saldrian sin orderId. Cada tarea corre en un virtual thread nuevo, pero se limpia igual.
+     */
+    private static <T> Callable<T> withCurrentMdc(Callable<T> task) {
+        Map<String, String> context = MDC.getCopyOfContextMap();
+        return () -> {
+            if (context != null) {
+                MDC.setContextMap(context);
+            }
+            try {
+                return task.call();
+            } finally {
+                MDC.clear();
+            }
+        };
+    }
+
+    private void recordProcessed(ProcessedOrder processed) {
+        metrics.processed(processed.outcome().status(), processed.order().market());
+        if (processed.outcome() instanceof ProcessingOutcome.Rejected rejected) {
+            rejected.reasons().forEach(metrics::rejected);
+        }
+    }
+
+    private static List<RejectionReason> reasons(ProcessingOutcome outcome) {
+        return outcome instanceof ProcessingOutcome.Rejected rejected ? rejected.reasons() : List.of();
     }
 
     private record Enrichment(Optional<ClientSnapshot> client, Map<String, ProductSnapshot> products) {

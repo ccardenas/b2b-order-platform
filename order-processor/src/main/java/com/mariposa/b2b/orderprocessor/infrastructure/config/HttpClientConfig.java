@@ -8,6 +8,7 @@ import com.mariposa.b2b.orderprocessor.infrastructure.http.ProductsApiClient;
 import com.mariposa.b2b.orderprocessor.infrastructure.http.ResilientHttpClient;
 import com.mariposa.b2b.orderprocessor.infrastructure.http.RetryPolicy;
 import com.mariposa.b2b.orderprocessor.infrastructure.http.Sleeper;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,7 +21,7 @@ import java.util.concurrent.ThreadLocalRandom;
 class HttpClientConfig {
 
     @Bean
-    ResilientHttpClient resilientHttpClient(HttpClientProperties props) {
+    ResilientHttpClient resilientHttpClient(HttpClientProperties props, MeterRegistry registry) {
         HttpClient http = HttpClient.newBuilder()
                 .connectTimeout(props.connectTimeout())
                 .followRedirects(HttpClient.Redirect.NEVER)
@@ -28,7 +29,7 @@ class HttpClientConfig {
         RetryPolicy policy = new RetryPolicy(
                 props.maxAttempts(), props.initialBackoff(), props.backoffMultiplier(), props.retryAfterCap());
         return new ResilientHttpClient(http, props.readTimeout(), policy, Sleeper.SYSTEM,
-                () -> ThreadLocalRandom.current().nextDouble());
+                () -> ThreadLocalRandom.current().nextDouble(), registry);
     }
 
     @Bean

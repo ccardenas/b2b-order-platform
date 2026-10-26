@@ -2,6 +2,9 @@ package com.mariposa.b2b.orderprocessor.infrastructure.http;
 
 import com.mariposa.b2b.orderprocessor.application.port.out.ExternalCallFailedException;
 import com.mariposa.b2b.orderprocessor.application.port.out.ExternalCallFailedException.Kind;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
@@ -27,6 +30,8 @@ import java.util.function.DoubleSupplier;
  */
 public final class ResilientHttpClient {
 
+    private static final Logger log = LoggerFactory.getLogger(ResilientHttpClient.class);
+
     public record Response(int status, String body, int attempts) {
     }
 
@@ -43,14 +48,17 @@ public final class ResilientHttpClient {
     private final RetryPolicy policy;
     private final Sleeper sleeper;
     private final DoubleSupplier jitter;
+    private final MeterRegistry registry;
 
     /** jitter devuelve un valor en [0, 1); se inyecta para poder fijarlo en los tests. */
-    public ResilientHttpClient(HttpClient http, Duration readTimeout, RetryPolicy policy, Sleeper sleeper, DoubleSupplier jitter) {
+    public ResilientHttpClient(HttpClient http, Duration readTimeout, RetryPolicy policy, Sleeper sleeper,
+                               DoubleSupplier jitter, MeterRegistry registry) {
         this.http = http;
         this.readTimeout = readTimeout;
         this.policy = policy;
         this.sleeper = sleeper;
         this.jitter = jitter;
+        this.registry = registry;
     }
 
     public Response get(String service, URI uri) {
@@ -68,6 +76,9 @@ public final class ResilientHttpClient {
                 // Esperar mas del tope amplificaria una tormenta de limites: se da por agotado.
                 throw transientFailure(service, retry.cause() + " with Retry-After above cap", attempt);
             }
+            // http_client_retries_total{target}: anticipa una tormenta de 429/5xx antes de que llegue a la DLT.
+            registry.counter("http.client.retries", "target", service).increment();
+            log.info("http retry target={} attempt={} cause={} waitMs={}", service, attempt, retry.cause(), wait.toMillis());
             pause(wait);
         }
     }

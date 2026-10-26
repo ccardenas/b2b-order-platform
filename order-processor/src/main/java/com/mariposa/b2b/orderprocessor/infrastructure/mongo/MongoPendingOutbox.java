@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 
 import static com.mariposa.b2b.orderprocessor.infrastructure.mongo.OrderDocumentMapper.ID;
 import static com.mariposa.b2b.orderprocessor.infrastructure.mongo.OrderDocumentMapper.OUTBOX;
@@ -48,6 +49,19 @@ public final class MongoPendingOutbox {
                     .into(new ArrayList<>());
         } catch (MongoException e) {
             throw new OrderStorageException("could not read pending outbox events", e);
+        }
+    }
+
+    /** createdAt del PENDING mas viejo, para outbox_pending_age_seconds. Tambien usa el indice parcial. */
+    public Optional<Instant> oldestPendingCreatedAt() {
+        try {
+            Document oldest = orders.find(Filters.eq(OUTBOX_STATUS, OUTBOX_PENDING))
+                    .sort(Sorts.ascending(OUTBOX_CREATED_AT))
+                    .projection(Projections.include(OUTBOX_CREATED_AT))
+                    .first();
+            return Optional.ofNullable(oldest).map(document -> document.get(OUTBOX, Document.class).getDate("createdAt").toInstant());
+        } catch (MongoException e) {
+            throw new OrderStorageException("could not read the oldest pending outbox event", e);
         }
     }
 }

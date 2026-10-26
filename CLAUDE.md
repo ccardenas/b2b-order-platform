@@ -92,7 +92,8 @@ cd clients-api && npm ci && npm test && npm run test:e2e
 cd clients-api && npm run build && PORT=3000 FAULT_INJECTION_ENABLED=true npm start
 
 # todo el stack
-docker compose up -d --build
+docker compose up -d --build --wait   # espera a que todos los healthchecks estén en verde
+docker compose down -v
 ```
 
 ## Plan de hitos

@@ -1,0 +1,111 @@
+# Entorno local de b2b-order-platform.
+#
+#   docker compose up -d --build --wait
+#
+# Desde el host:
+#   Kafka         localhost:9094
+#   MongoDB       mongodb://localhost:27017
+#   products-api  http://localhost:8080
+#   clients-api   http://localhost:3000
+#
+# order-processor se agrega en el hito 7.
+
+name: b2b-order-platform
+
+services:
+  kafka:
+    image: apache/kafka:4.3.2
+    # Un solo nodo con los roles broker y controller (KRaft, sin Zookeeper).
+    # Si se define alguna variable KAFKA_*, la imagen deja de usar su
+    # configuracion por defecto, asi que hay que declararlas todas.
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # Dos listeners de clientes: PLAINTEXT para los contenedores de la red
+      # de compose (kafka:9092) y EXTERNAL para el host (localhost:9094).
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      # Con un solo broker los topicos internos no pueden tener replicas.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Los topicos los crea kafka-init. Asi, un nombre mal escrito en un
+      # productor o consumidor falla en vez de crear un topico nuevo.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    ports:
+      - "9094:9094"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  # Crea los topicos y termina. Es idempotente (--if-not-exists).
+  # Mismo numero de particiones en el DLT que en el origen: el recoverer de
+  # Spring publica en la misma particion que el mensaje original.
+  kafka-init:
+    image: apache/kafka:4.3.2
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        for topic in orders.created.v1 orders.processed.v1 orders.processing.dlt; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 \
+            --create --if-not-exists --topic "$$topic" \
+            --partitions 3 --replication-factor 1
+        done
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --describe
+    restart: "no"
+
+  mongo:
+    image: mongo:8.0.34
+    # Standalone y sin autenticacion: solo para desarrollo local. La escritura
+    # condicional (§6.2) es atomica en un documento y no necesita replica set.
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "quit(db.adminCommand('ping').ok ? 0 : 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  products-api:
+    build: ./products-api
+    environment:
+      PORT: 8080
+      # Activado solo en compose y en tests (§10 de la propuesta).
+      FAULT_INJECTION_ENABLED: "true"
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  clients-api:
+    build: ./clients-api
+    environment:
+      PORT: 3000
+      FAULT_INJECTION_ENABLED: "true"
+    ports:
+      - "3000:3000"
+    healthcheck:
+      # La imagen trae wget de busybox, pero con fetch de Node el healthcheck
+      # no depende de lo que incluya la imagen base.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s

@@ -81,7 +81,8 @@ Kafka (orders.created.v1) → order-processor (Java) → clients-api (NestJS)
 cd contracts && npm install && npm run validate
 
 # order-processor
-cd order-processor && ./mvnw verify
+cd order-processor && ./mvnw test     # unitarios, WireMock y ArchUnit (sin Docker)
+cd order-processor && ./mvnw verify   # además los *IT con Testcontainers (requiere Docker)
 
 # products-api
 cd products-api && go vet ./... && go test -race ./...

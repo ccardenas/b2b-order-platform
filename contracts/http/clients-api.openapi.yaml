@@ -72,7 +72,7 @@ components:
       required: [clientId, name, status, segment, taxRegime, market]
       description: >
         status, segment y taxRegime son tres campos independientes del
-        cliente (ver docs/prueba tecnica Tech Lead.pdf §6): no son valores
+        cliente (enunciado de la prueba, §6): no son valores
         de un unico enum.
       properties:
         clientId:

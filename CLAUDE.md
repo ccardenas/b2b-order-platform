@@ -57,7 +57,7 @@ Kafka (orders.created.v1) → order-processor (Java) → clients-api (NestJS)
 
 ### clients-api (NestJS)
 - Controller solo como transporte. El service contiene la lógica. El repositorio va detrás de un token de inyección, con implementación en memoria.
-- Cliente: `status` (`ACTIVE`/`BLOCKED`), `segment` (`RETAIL`/`WHOLESALE`) y `taxRegime` (`GENERAL`/`SIMPLIFIED`/`EXEMPT`) son tres campos independientes (según el enunciado, `docs/prueba tecnica Tech Lead.pdf` §6), no un único enum.
+- Cliente: `status` (`ACTIVE`/`BLOCKED`), `segment` (`RETAIL`/`WHOLESALE`) y `taxRegime` (`GENERAL`/`SIMPLIFIED`/`EXEMPT`) son tres campos independientes (según el enunciado de la prueba, §6; copia local no versionada en `.local/prueba tecnica Tech Lead.pdf`), no un único enum.
 - Semilla: al menos 6 clientes repartidos entre MX, CO y PE, cubriendo ambos valores de `status` y `segment`, y los tres de `taxRegime` (incluido `SIMPLIFIED`, sin regla de negocio propia pero presente en el contrato).
 
 ### Compartido

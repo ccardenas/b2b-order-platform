@@ -9,7 +9,7 @@ import (
 	"github.com/ccardenas/b2b-order-platform/products-api/internal/product/memory"
 )
 
-// La semilla es un requisito del hito (CLAUDE.md): >= 10 productos, los
+// La semilla es un requisito del hito 2 (propuesta §12): >= 10 productos, los
 // tres mercados, todos los status y todas las taxCategory en cada mercado.
 func TestSeedCoverage(t *testing.T) {
 	seed := memory.Seed()

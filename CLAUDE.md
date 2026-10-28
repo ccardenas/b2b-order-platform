@@ -23,7 +23,7 @@ Kafka (orders.created.v1) → order-processor (Java) → clients-api (NestJS)
 
 ## Reglas de trabajo (obligatorias)
 
-1. **No hagas commits ni push.** Claudio revisa y commitea. Al terminar una tarea, sugiere un mensaje de commit en formato Conventional Commits (`feat(order-processor): ...`).
+1. **No hagas commits ni push.** El autor del repositorio revisa y commitea. Al terminar una tarea, sugiere un mensaje de commit en formato Conventional Commits (`feat(order-processor): ...`).
 2. **Trabaja por hitos pequeños** (ver "Plan de hitos"). No avances al siguiente sin que el actual compile y tenga los tests en verde.
 3. **Ejecuta los tests** después de cada cambio relevante y muestra el resultado. No declares algo terminado sin evidencia.
 4. **Explica las decisiones no obvias** en 2 o 3 líneas. Todo el código debe poder defenderse en una entrevista técnica.
@@ -112,7 +112,3 @@ docker compose down -v
 | 7 | Listener Kafka, offsets, DLT, outbox y relay | Test de integración del flujo completo |
 | 8 | Observabilidad (logs JSON, Micrometer) | Métricas en `/actuator/prometheus` |
 | 9 | README, implementation-notes, technical-leadership, ADRs, sección de IA | Un tercero levanta y prueba el sistema con el README |
-
-## Registro de uso de IA
-
-El README debe declarar qué herramientas se usaron, para qué, qué se verificó y una sugerencia descartada. Cuando Claudio rechace o corrija una propuesta tuya, **agrega una entrada** en `docs/ai-usage-log.md` con la fecha, qué se propuso, por qué se descartó y qué se hizo en su lugar.

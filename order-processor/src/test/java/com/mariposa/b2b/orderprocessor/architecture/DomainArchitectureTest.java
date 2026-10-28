@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 /**
- * domain/ debe ser Java puro (propuesta §4.1 "Reglas" y CLAUDE.md): nada de
+ * domain/ debe ser Java puro (propuesta §4.1 "Reglas"): nada de
  * Spring, Kafka, Mongo ni Jackson. Se verifica importando todo el paquete
  * base del proyecto, no solo domain, para que ArchUnit pueda resolver las
  * dependencias reales entre clases.

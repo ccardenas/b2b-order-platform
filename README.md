@@ -20,12 +20,14 @@ Kafka (orders.created.v1) → order-processor (Java) → clients-api (NestJS)
 | [`products-api/`](products-api) | Catálogo de productos por mercado. Go, solo librería estándar |
 | [`clients-api/`](clients-api) | Maestro de clientes. NestJS, TypeScript `strict` |
 | [`contracts/`](contracts) | JSON Schema de los eventos, OpenAPI de las APIs y fixtures. Fuente única de contratos |
-| [`docs/`](docs) | Propuesta de arquitectura, notas de implementación y ADRs |
+| [`docs/`](docs) | Propuesta de arquitectura, notas de implementación, liderazgo técnico y ADRs |
 
 El diseño está en [`docs/architecture-proposal.md`](docs/architecture-proposal.md), escrito antes
 de implementar. Las diferencias con lo implementado están en
 [`docs/implementation-notes.md`](docs/implementation-notes.md). Las dos decisiones centrales tienen
 su ADR en [`docs/adr/`](docs/adr).
+Cómo conduciría la implementación con un equipo de cuatro personas está en
+[`docs/technical-leadership.md`](docs/technical-leadership.md).
 
 ---
 
@@ -308,3 +310,46 @@ de cada punto están en [`docs/implementation-notes.md`](docs/implementation-not
 - **Sin script de smoke E2E:** la sección "Probar el sistema a mano" lo reemplaza.
 - **Datos en memoria:** las APIs usan semillas fijas y no hay caché de productos en
   order-processor.
+
+---
+
+## Uso de herramientas de IA
+
+### Herramientas y para qué se usaron
+
+| Herramienta | Uso |
+|---|---|
+| **Claude** (chat web) | Discusión y redacción de la propuesta de arquitectura antes de implementar. |
+| **Claude Code** (agente en la terminal) | Implementación de los tres servicios, los contratos, `docker-compose.yml`, los tests y la documentación, hito por hito según el plan de la propuesta (§12). |
+
+Claude Code trabajó con las reglas de [`CLAUDE.md`](CLAUDE.md): sin commits propios, un hito a la
+vez con los tests en verde antes de avanzar, explicación de cada decisión no obvia y parada
+obligatoria ante cualquier ambigüedad o contradicción con la propuesta. Cada hito se commiteó
+a mano. Las diferencias con la propuesta quedaron registradas en
+[`docs/implementation-notes.md`](docs/implementation-notes.md), con la fecha en que se
+aprobaron cuando cambiaban un contrato (P1, C1, C2).
+
+### Qué se verificó personalmente
+
+- **La propuesta de arquitectura** ([`docs/architecture-proposal.md`](docs/architecture-proposal.md)):
+  supuestos, clasificación de errores, idempotencia, consistencia entre Mongo y Kafka y plan
+  de entrega.
+- **El cálculo de importes:** impuestos por mercado y categoría, exención por régimen, descuento
+  mayorista y redondeo `HALF_UP` por importe, contrastados con los tests del dominio.
+- **El stack completo:** levantado con `docker compose`, con los tests de los tres servicios y la
+  prueba manual de [Probar el sistema a mano](#probar-el-sistema-a-mano).
+
+El resto del código (adaptadores, persistencia, listener, outbox y observabilidad) lo generó
+Claude Code. Su comportamiento está respaldado por los tests automatizados descritos en
+[Tests](#tests): WireMock para los fallos HTTP, Testcontainers para la concurrencia y el flujo
+completo, ArchUnit para los límites del dominio.
+
+### Una sugerencia descartada
+
+Al implementar clients-api, Claude Code propuso agregar un fallo inyectado `CLI-FAIL-503`,
+simétrico al `PRD-FAIL-503` de products-api. Se descartó: el OpenAPI de clients-api no declara
+un 503, así que agregarlo obligaba a ampliar el contrato solo para un fallo de prueba. Además,
+el caso transitorio ya estaba cubierto por `CLI-FAIL-500` y `CLI-FAIL-429`, que order-processor
+clasifica igual que un 503. Quedó registrado en la nota C2 de
+[`docs/implementation-notes.md`](docs/implementation-notes.md) y en
+[`docs/ai-usage-log.md`](docs/ai-usage-log.md).

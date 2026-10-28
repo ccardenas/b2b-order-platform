@@ -155,3 +155,57 @@ Lo que la propuesta menciona y esta versión no incluye.
 | G2 | §8.3: CI con verificación de compatibilidad de schemas respecto de `main` | No hay CI | Los tests y `contracts/validate.js` se corren localmente. Pact sigue siendo una evolución opcional. |
 | G3 | §10: script de smoke E2E con `docker compose up` | No hay script | La sección "Probar el sistema a mano" del README, con comandos verificados sobre un stack recién creado el 2026-10-26. Es el recorte que §12 dejaba para el final. |
 | G4 | §7.2: lease del relay (`outbox.lockedUntil`) | No implementado, como prevé la propuesta | Publicación al menos una vez con `eventId` estable (K11). |
+
+## Deuda técnica consciente
+
+Atajos tomados a sabiendas, con el motivo y cuándo habría que pagarlos. Ninguno afecta las
+reglas de negocio ni la idempotencia.
+
+| # | Deuda | Por qué se aceptó | Cuándo pagarla |
+|---|---|---|---|
+| D1 | Sin autenticación entre servicios, Kafka sin TLS y Mongo sin usuario (S11, I4) | Fuera del alcance de una prueba local | Antes de cualquier entorno compartido |
+| D2 | Kafka con un broker y factor de replicación 1; Mongo standalone (I1, I4). `WriteConcern.MAJORITY` (M6) equivale a un solo nodo | Suficiente para mostrar el flujo en compose | Antes de producción: RF 3 y replica set |
+| D3 | Sin CI ni verificación de compatibilidad de schemas (G2) | Los tests corren localmente | Primer cambio con más tiempo (ver abajo) |
+| D4 | Sin script de smoke E2E (G3) | Fue el recorte previsto en §12 | Junto con D3 |
+| D5 | products-api no valida sus respuestas contra el OpenAPI (P8) | Exigiría una dependencia en un servicio que usa solo la librería estándar | Con un job de CI que valide las respuestas desde fuera, sin tocar el servicio |
+| D6 | `/actuator/health` es solo liveness: no comprueba Mongo ni Kafka (O10) | Sin Spring Data no hay indicador de Mongo automático | Antes de desplegar con un orquestador que use readiness |
+| D7 | Sin herramienta de replay desde la DLT | Los headers ya tienen todo lo necesario (§5.5) y el replay se puede hacer a mano | Antes de operar en producción |
+| D8 | Relay del outbox sin lease (G4) | Con una instancia no hay competencia; con varias, la publicación sigue siendo al menos una vez con `eventId` estable | Al escalar a más de una instancia, si los consumidores no deduplican |
+| D9 | `contracts/events/dlt-headers.md` no existe (G1) | Los headers están en §5.5 y los verifica `OrderProcessingFlowIT` | Cuando otro equipo consuma la DLT |
+| D10 | El read timeout cubre hasta los headers, no el cuerpo (N5) | Limitación del `HttpClient` del JDK; el presupuesto de 12 s acota el peor caso | Si una API empieza a devolver cuerpos grandes o lentos |
+
+## Riesgos residuales
+
+Lo que puede salir mal aun con todo lo implementado funcionando como se diseñó.
+
+| # | Riesgo | Impacto | Qué lo mitiga hoy | Cómo se detecta |
+|---|---|---|---|---|
+| R1 | Un consumidor de `orders.processed.v1` que no deduplica por `eventId` | Ve dos veces el mismo resultado tras una republicación del relay | El `eventId` es estable (ADR 0002) y el schema de salida lo declara así | Del lado del consumidor; no es observable desde order-processor |
+| R2 | Una revisión nueva reemplaza a la anterior mientras su evento sigue `PENDING`, o la reemplaza un `TECHNICAL_FAILURE` (M3) | Los consumidores nunca ven el resultado intermedio | Trade-off aceptado en §7.3: el estado final es el correcto | `outbox_pending_age_seconds` alto antes de la revisión nueva |
+| R3 | Mongo caído durante más de ~1,5 min | Tras 6 entregas (§5.3: 62 s de backoff más hasta 5 s de selección de servidor por intento), los mensajes van a la DLT como `PERSISTENCE` y la partición se vacía hacia allí | Reintentos con backoff y `serverSelectionTimeoutMS=5000` (M7) | `orders_dlt_total{category="PERSISTENCE"}`; se recupera con replay manual (D7) |
+| R4 | Un bug de cálculo que ya aprobó pedidos | Reprocesar el mismo evento da `DUPLICATE` y no corrige nada | Tests parametrizados de impuestos, descuento y redondeo | Conciliación de totales; la corrección exige una revisión nueva del productor |
+| R5 | Un proveedor agrega un valor de enum sin avisar (S10) | Todos los pedidos con ese cliente o producto quedan `TECHNICAL_FAILURE` y van a la DLT | Política S10: no se rechaza por un problema técnico | `orders_dlt_total{category="EXTERNAL_PERMANENT"}`; replay tras actualizar el consumidor |
+| R6 | APIs lentas o con 429 sostenidos | La partición avanza a ritmo del presupuesto por mensaje y el lag crece (ADR 0003) | Timeouts, `Retry-After` con tope, presupuesto de 12 s | `kafka_consumer_fetch_manager_records_lag_max`, `http_client_retries_total` |
+| R7 | Pinning de virtual threads en Java 21 | Menos concurrencia efectiva si una librería bloquea dentro de `synchronized` | Concurrencia baja (3 listeners más las llamadas de un pedido) | No medido; ver ADR 0003 |
+| R8 | Un 5xx que en realidad es permanente (501, 505) | Se reintenta 3 veces antes de fallar (N1) | El costo es acotado: unos segundos por mensaje | `http_client_retries_total{target}` |
+
+## Siguiente cambio con más tiempo
+
+**CI con el smoke E2E y la verificación de compatibilidad de contratos** (D3 y D4).
+
+Es lo primero porque protege todo lo demás. Hoy la evidencia de que el sistema funciona son
+comandos que alguien tiene que acordarse de correr. Con CI, cada PR corre los tests de los tres
+servicios y la validación de `contracts/`, y un job falla si un cambio rompe un schema `v1`
+respecto de `main` (§8.3). Al mergear, el smoke levanta compose, publica los eventos del README y
+verifica Mongo, `orders.processed.v1` y la DLT. Cualquier cambio posterior, incluidos los de esta
+lista, se puede hacer con red de seguridad.
+
+Después, en este orden:
+
+1. **Herramienta de replay desde la DLT** (D7). Es lo que hace operables R3 y R5: hoy se
+   recuperan a mano.
+2. **Readiness con Mongo y Kafka** (D6), junto con los umbrales de alerta de
+   [`technical-leadership.md`](technical-leadership.md) §7.
+3. **Caché de productos con expiración** (§9 de la propuesta). Reduce R6 sin cambiar el modelo
+   de concurrencia.
+4. **Lease del relay** (D8), solo cuando se despliegue más de una instancia.

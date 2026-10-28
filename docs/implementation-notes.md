@@ -21,7 +21,7 @@ escrita; las notas de las tablas por hito (más abajo) explican cada diferencia.
 | §5.3 Timeouts y reintentos | Igual en valores | `Retry-After` también en 5xx (N7), *equal jitter* (N8), presupuesto de enriquecimiento de 12 s (N12), `serverSelectionTimeoutMS=5000` (M7). |
 | §5.4 Respuestas parciales | Igual | — |
 | §5.5 Metadata de la DLT | Igual | Definición de `x-attempts` (K4) y formato de headers (K5). |
-| §6 Idempotencia y concurrencia | Igual | Reintento del upsert si la relectura tras un E11000 dice "escribible" (M2). Ver [ADR 0001](adr/0001-idempotencia-con-escritura-condicional.md). |
+| §6 Idempotencia y concurrencia | Igual | Reintento del upsert si la relectura tras un E11000 dice "escribible" (M2). Ver [ADR 0001](adr/0001-idempotencia-con-escritura-condicional.md) y, para el modelo de concurrencia, [ADR 0003](adr/0003-modelo-de-concurrencia-del-worker.md). |
 | §7 Consistencia Mongo–Kafka | Igual | Un `TECHNICAL_FAILURE` se guarda sin outbox y borra el anterior (N14, M3). Relay sin lease (K11). Ver [ADR 0002](adr/0002-outbox-embebido-en-el-documento-del-pedido.md). |
 | §7.4 Índices | Igual | Se crean al construir el store, con nombres fijos (M8). |
 | §8.1 Ownership | Incompleto | `contracts/events/dlt-headers.md` no existe (G1). |

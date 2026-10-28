@@ -24,8 +24,9 @@ Kafka (orders.created.v1) → order-processor (Java) → clients-api (NestJS)
 
 El diseño está en [`docs/architecture-proposal.md`](docs/architecture-proposal.md), escrito antes
 de implementar. Las diferencias con lo implementado están en
-[`docs/implementation-notes.md`](docs/implementation-notes.md). Las dos decisiones centrales tienen
-su ADR en [`docs/adr/`](docs/adr).
+[`docs/implementation-notes.md`](docs/implementation-notes.md). Las decisiones centrales tienen
+su ADR en [`docs/adr/`](docs/adr): idempotencia (0001), outbox (0002) y modelo de concurrencia
+del worker (0003).
 Cómo conduciría la implementación con un equipo de cuatro personas está en
 [`docs/technical-leadership.md`](docs/technical-leadership.md).
 
